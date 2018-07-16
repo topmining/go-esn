@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/ethersocial/go-esn/common"
+	cmath "github.com/ethersocial/go-esn/common/math"
 	"github.com/ethersocial/go-esn/core/state"
 	"github.com/ethersocial/go-esn/core/types"
 	"github.com/ethersocial/go-esn/event"
@@ -138,6 +139,7 @@ type TxPoolConfig struct {
 	GlobalQueue  uint64 // Maximum number of non-executable transaction slots for all accounts
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
+	MinValue  *big.Int
 }
 
 // DefaultTxPoolConfig contains the default configurations for the transaction
@@ -155,6 +157,7 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	GlobalQueue:  1024,
 
 	Lifetime: 3 * time.Hour,
+	MinValue: cmath.MustParseBig256("100000000000000"),
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -581,6 +584,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
 		return ErrNonceTooLow
 	}
+	// Reject Min Value to prevent DOS attacks (YSR)
+	if tx.Cost().Cmp(DefaultTxPoolConfig.MinValue) < 0 {
+		return ErrInsufficientFunds
+	}	
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
